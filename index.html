@@ -1,0 +1,882 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Latam Go Travel · Auditor y Generador Automático de Reportes HubSpot</title>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+:root{
+  --bg:#f4f7fb;--card:#ffffff;--text:#172033;--muted:#667085;--line:#e6eaf0;
+  --accent:#ff7a59;--blue:#2563eb;--red:#b42318;--green:#067647;--amber:#b54708;--purple:#6941c6;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text)}
+header{background:linear-gradient(120deg,#172033,#1e293b);color:#fff;padding:28px 5vw 24px;box-shadow:0 4px 18px rgba(0,0,0,.08)}
+header .top-tag{display:inline-block;background:rgba(255,122,89,.2);color:#ff9e85;font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:4px 10px;border-radius:20px;margin-bottom:8px}
+header h1{margin:0 0 6px;font-size:26px;letter-spacing:-.4px}
+header p{margin:0;opacity:.85;font-size:13.5px}
+main{width:min(1380px,94vw);margin:24px auto 60px}
+.step-card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 4px 18px rgba(20,35,60,.04);padding:22px;margin-bottom:20px}
+.step-title{font-size:17px;font-weight:700;margin:0 0 6px;color:#1e293b;display:flex;align-items:center;gap:8px}
+.step-sub{font-size:12.5px;color:var(--muted);margin:0 0 16px;line-height:1.5}
+.upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.dropzone{border:2px dashed #cbd5e1;border-radius:12px;padding:24px;text-align:center;background:#f8fafc;cursor:pointer;transition:all .2s}
+.dropzone:hover{border-color:var(--blue);background:#eff6ff}
+.dropzone input{display:none}
+.dropzone h4{margin:0 0 6px;font-size:14.5px;color:#1e293b}
+.dropzone p{margin:0;font-size:12px;color:var(--muted)}
+.status-banner{padding:14px 16px;border-radius:10px;margin-top:16px;font-size:13px;line-height:1.5;display:none}
+.status-ok{background:#ecfdf3;border-left:4px solid var(--green);color:#065f46}
+.status-err{background:#fef3f2;border-left:4px solid var(--red);color:#991b1b}
+.status-warn{background:#fffaeb;border-left:4px solid var(--amber);color:#92400e}
+.col-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;margin-top:14px}
+.col-item{padding:10px 12px;border-radius:8px;border:1px solid var(--line);font-size:12px;display:flex;justify-content:space-between;align-items:center;background:#fff}
+.col-item.ok{border-left:4px solid var(--green)}
+.col-item.missing{border-left:4px solid var(--red);background:#fff5f5}
+.col-item.opt{border-left:4px solid var(--amber);background:#fffbeb}
+.badge{display:inline-block;padding:3px 8px;border-radius:12px;font-size:10.5px;font-weight:700}
+.badge-green{background:#ecfdf3;color:var(--green)}
+.badge-red{background:#fef3f2;color:var(--red)}
+.badge-amber{background:#fffaeb;color:var(--amber)}
+.badge-blue{background:#eff8ff;color:var(--blue)}
+.config-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:14px}
+.field label{display:block;font-size:11.5px;font-weight:700;color:#475467;margin-bottom:5px}
+.field select,.field input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fff}
+.btn-bar{display:flex;gap:12px;margin-top:20px;flex-wrap:wrap}
+.btn{padding:12px 22px;border-radius:10px;border:none;font-size:13.5px;font-weight:700;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:8px}
+.btn-primary{background:var(--accent);color:#fff;box-shadow:0 4px 12px rgba(255,122,89,.3)}
+.btn-primary:hover{background:#f06442}
+.btn-secondary{background:#1e293b;color:#fff}
+.btn-secondary:hover{background:#0f172a}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.audit-list{margin:10px 0 0;padding-left:18px;font-size:12.5px;line-height:1.6}
+.preview-frame{width:100%;height:720px;border:1px solid var(--line);border-radius:12px;background:#fff;margin-top:14px}
+@media(max-width:900px){.upload-grid,.config-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="top-tag">Latam Go Travel · Herramienta Interna BackOffice Comercial</span>
+  <h1>Auditor de CSV HubSpot y Generador Automático de Reportes</h1>
+  <p>Sube tu exportación de HubSpot Empresas, verifica que no falte ninguna columna ni dato crítico y descarga tu Dashboard HTML homologado en 1 clic.</p>
+</header>
+
+<main>
+  <!-- PASO 1: CARGA DE ARCHIVOS -->
+  <section class="step-card">
+    <h2 class="step-title">1. Subir archivo CSV exportado de HubSpot</h2>
+    <p class="step-sub">Tip para no fallar nunca: En HubSpot ve a <strong>CRM → Empresas → Exportar</strong> y marca <strong>"Incluir todas las propiedades"</strong> (en formato CSV). Si además subes el CSV de la semana pasada, el sistema calculará automáticamente la tabla comparativa de Avance Semanal ($\Delta$).</p>
+    
+    <div class="upload-grid">
+      <label class="dropzone" id="dropCurr">
+        <input type="file" id="csvCurrent" accept=".csv">
+        <h4 id="currTitle">📂 Cargar CSV Actual de HubSpot (Obligatorio)</h4>
+        <p id="currSub">Haz clic aquí para seleccionar el archivo CSV de esta semana</p>
+      </label>
+
+      <label class="dropzone" id="dropPrev">
+        <input type="file" id="csvPrevious" accept=".csv">
+        <h4 id="prevTitle">🕒 Cargar CSV de la Semana Anterior (Opcional)</h4>
+        <p id="prevSub">Súbelo si quieres que calcule automáticamente las variaciones semanales ($\Delta$)</p>
+      </label>
+    </div>
+
+    <div id="auditBanner" class="status-banner"></div>
+    <div id="columnsAuditGrid" class="col-grid"></div>
+  </section>
+
+  <!-- PASO 2: AUDITORÍA DE CALIDAD DE DATOS DEL CRM -->
+  <section class="step-card" id="crmQualitySection" style="display:none">
+    <h2 class="step-title">2. Auditoría de Calidad de Datos en tu Cartera (Pre-Reunión)</h2>
+    <p class="step-sub">Revisión automática de incoherencias en tus registros que podrían distorsionar tus tablas frente a Dirección.</p>
+    <div id="crmQualityContent"></div>
+  </section>
+
+  <!-- PASO 3: CONFIGURACIÓN DEL COMERCIAL Y METAS -->
+  <section class="step-card" id="configSection" style="display:none">
+    <h2 class="step-title">3. Seleccionar Comercial, Fecha de Corte y Metas Anuales</h2>
+    <p class="step-sub">Al cambiar de comercial se cargan automáticamente sus metas predeterminadas, pero puedes ajustar cualquier número antes de generar el HTML.</p>
+
+    <div class="config-grid">
+      <div class="field">
+        <label>Comercial (Propietario en HubSpot)</label>
+        <select id="ownerSelect" onchange="onOwnerChange()"></select>
+      </div>
+      <div class="field">
+        <label>Fecha de Corte del Reporte</label>
+        <input type="date" id="cutoffDate">
+      </div>
+      <div class="field">
+        <label>Etiqueta Corte Anterior (si hay CSV previo)</label>
+        <input type="text" id="prevDateLabel" value="Semana Anterior">
+      </div>
+      <div class="field">
+        <label>Meta Anual Empleadores (Host Comp.)</label>
+        <input type="number" id="goalHost" value="12">
+      </div>
+      <div class="field">
+        <label>Acuerdos Base 2025 Empleadores (A descontar)</label>
+        <input type="number" id="histHost" value="2" title="Acuerdos cerrados en 2025 migrados a HubSpot">
+      </div>
+      <div class="field">
+        <label>Meta Anual Universidades</label>
+        <input type="number" id="goalUni" value="6">
+      </div>
+      <div class="field">
+        <label>Acuerdos Base 2025 Universidades (A descontar)</label>
+        <input type="number" id="histUni" value="1" title="Acuerdos universitarios cerrados en 2025 migrados a HubSpot">
+      </div>
+      <div class="field">
+        <label>Meta Anual Agencias / Partners</label>
+        <input type="number" id="goalPart" value="6">
+      </div>
+    </div>
+
+    <div class="btn-bar">
+      <button class="btn btn-primary" id="btnGenerate" onclick="generateAndPreview()">⚡ Generar Vista Previa del Reporte</button>
+      <button class="btn btn-secondary" id="btnDownload" onclick="downloadReport()" disabled>⬇️ Descargar Archivo HTML para Reunión</button>
+    </div>
+  </section>
+
+  <!-- PASO 4: VISTA PREVIA EN VIVO -->
+  <section class="step-card" id="previewSection" style="display:none">
+    <h2 class="step-title">4. Vista Previa del Dashboard Homologado</h2>
+    <p class="step-sub">Así se verá exactamente el archivo HTML que descargarás para presentar en la reunión semanal.</p>
+    <iframe id="previewFrame" class="preview-frame"></iframe>
+  </section>
+</main>
+
+<script>
+let currentData = [];
+let previousData = [];
+let generatedHtmlString = "";
+
+// Diccionario de columnas requeridas y sus alias en español/inglés en HubSpot
+const REQUIRED_SCHEMA = [
+  { key: "empresa", label: "Nombre de la empresa", aliases: ["Nombre de la empresa", "Company name", "Name"], critical: true, desc: "Nombre comercial de la cuenta" },
+  { key: "propietario", label: "Propietario del registro de empresa", aliases: ["Propietario del registro de empresa", "Company owner", "Propietario de la empresa"], critical: true, desc: "Filtra los leads de cada comercial" },
+  { key: "tipo", label: "Tipo", aliases: ["Tipo", "Type"], critical: true, desc: "Clasifica los 3 Vértices (Escuelas y Universidades, Host Company, Partner)" },
+  { key: "estado", label: "Estado del lead", aliases: ["Estado del lead", "Lead Status", "Estado del Lead"], critical: true, desc: "Fase del embudo (Prospecto, Contactado, Interesado, etc.)" },
+  { key: "pais", label: "País/región", aliases: ["País/región", "Country/Region", "País", "Country"], critical: true, desc: "Necesario para las matrices por país" },
+  { key: "creacion", label: "Fecha de creación", aliases: ["Fecha de creación", "Create Date"], critical: true, desc: "Calcula 1.ª interacción y Días Totales en Gestión" },
+  { key: "ultima_act", label: "Última actividad", aliases: ["Última actividad", "Last Activity Date", "Fecha de la última actividad"], critical: true, desc: "Calcula los Días de Inactividad (>15d)" },
+  { key: "contactos", label: "Número de veces contactado", aliases: ["Número de veces contactado", "Number of times contacted"], critical: true, desc: "Muestra el N.º de Interacciones acumuladas" },
+  { key: "ult_llamada", label: "Fecha de la última llamada registrada", aliases: ["Fecha de la última llamada registrada", "Last Logged Call Date"], critical: true, desc: "Auditoría de última llamada y cadencia" },
+  { key: "ult_correo", label: "Fecha del último correo electrónico saliente registrado", aliases: ["Fecha del último correo electrónico saliente registrado", "Last Logged Outgoing Email Date"], critical: true, desc: "Auditoría de último correo y cadencia" },
+  { key: "fuente", label: "Fuente del Lead", aliases: ["Fuente del Lead", "Lead Source", "Fuente original de tráfico"], critical: false, desc: "Opcional pero recomendado para la tabla de Eventos (Salón Gourmets, Sevilla)" }
+];
+
+let columnMap = {};
+
+document.getElementById("cutoffDate").value = new Date().toISOString().split("T")[0];
+
+document.getElementById("csvCurrent").addEventListener("change", function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById("currTitle").innerText = "✅ " + file.name;
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    complete: function(results) {
+      currentData = results.data;
+      auditColumnsAndData(results.meta.fields || []);
+    }
+  });
+});
+
+document.getElementById("csvPrevious").addEventListener("change", function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById("prevTitle").innerText = "✅ " + file.name;
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    complete: function(results) {
+      previousData = results.data;
+      if (currentData.length > 0) runCrmQualityAudit();
+    }
+  });
+});
+
+function resolveCol(headers, aliases) {
+  const normHeaders = headers.map(h => h.trim().toLowerCase());
+  for (let a of aliases) {
+    const idx = normHeaders.indexOf(a.trim().toLowerCase());
+    if (idx !== -1) return headers[idx];
+  }
+  return null;
+}
+
+function auditColumnsAndData(headers) {
+  columnMap = {};
+  const grid = document.getElementById("columnsAuditGrid");
+  grid.innerHTML = "";
+  let missingCritical = [];
+  let missingOptional = [];
+
+  REQUIRED_SCHEMA.forEach(item => {
+    const found = resolveCol(headers, item.aliases);
+    columnMap[item.key] = found;
+    const div = document.createElement("div");
+    if (found) {
+      div.className = "col-item ok";
+      div.innerHTML = `<div><strong>${item.label}</strong><br><span style="color:var(--muted);font-size:11px">${item.desc}</span></div><span class="badge badge-green">OK</span>`;
+    } else if (item.critical) {
+      missingCritical.push(item);
+      div.className = "col-item missing";
+      div.innerHTML = `<div><strong>${item.label}</strong><br><span style="color:var(--red);font-size:11px">Falta en tu CSV (${item.desc})</span></div><span class="badge badge-red">FALTA</span>`;
+    } else {
+      missingOptional.push(item);
+      div.className = "col-item opt";
+      div.innerHTML = `<div><strong>${item.label}</strong><br><span style="color:var(--amber);font-size:11px">Opcional: ${item.desc}</span></div><span class="badge badge-amber">AVISO</span>`;
+    }
+    grid.appendChild(div);
+  });
+
+  const banner = document.getElementById("auditBanner");
+  banner.style.display = "block";
+
+  if (missingCritical.length > 0) {
+    banner.className = "status-banner status-err";
+    banner.innerHTML = `<strong>❌ No se puede generar el reporte todavía: Faltan ${missingCritical.length} columna(s) obligatoria(s) en tu CSV.</strong><br>
+    Columnas faltantes: <b>${missingCritical.map(m => m.label).join(", ")}</b>.<br>
+    👉 <strong>Cómo solucionarlo en 10 segundos en HubSpot:</strong> Ve a <em>CRM → Empresas → Exportar</em> y elige la opción <strong>"Incluir todas las propiedades"</strong> (en vez de "Propiedades en la vista actual") o agrega esas columnas a tu vista antes de exportar.`;
+    document.getElementById("configSection").style.display = "none";
+    document.getElementById("crmQualitySection").style.display = "none";
+    return;
+  }
+
+  if (missingOptional.length > 0) {
+    banner.className = "status-banner status-warn";
+    banner.innerHTML = `<strong>⚠️ CSV válido (${currentData.length} filas), pero no incluye la columna opcional "${missingOptional.map(m => m.label).join(", ")}".</strong><br>
+    El reporte se generará perfectamente, pero para ver el desglose automático de ferias (como Salón Gourmets o Sevilla), te recomendamos exportar desde HubSpot marcando <strong>"Incluir todas las propiedades"</strong>.`;
+  } else {
+    banner.className = "status-banner status-ok";
+    banner.innerHTML = `<strong>✅ Auditoría de Columnas Perfecta:</strong> Tu CSV contiene el 100% de las propiedades requeridas por Dirección (${currentData.length} registros leídos).`;
+  }
+
+  populateOwners();
+  document.getElementById("configSection").style.display = "block";
+  document.getElementById("crmQualitySection").style.display = "block";
+  runCrmQualityAudit();
+}
+
+function populateOwners() {
+  const ownerCol = columnMap.propietario;
+  const counts = {};
+  currentData.forEach(r => {
+    const o = (r[ownerCol] || "Sin propietario").trim();
+    if (o) counts[o] = (counts[o] || 0) + 1;
+  });
+  const sel = document.getElementById("ownerSelect");
+  sel.innerHTML = "";
+  Object.keys(counts).sort((a,b) => counts[b] - counts[a]).forEach(o => {
+    const opt = document.createElement("option");
+    opt.value = o;
+    opt.innerText = `${o} (${counts[o]} empresas)`;
+    sel.appendChild(opt);
+  });
+  onOwnerChange();
+}
+
+function onOwnerChange() {
+  const owner = document.getElementById("ownerSelect").value.toLowerCase();
+  if (owner.includes("jaime")) {
+    document.getElementById("goalHost").value = 12;
+    document.getElementById("histHost").value = 2;
+    document.getElementById("goalUni").value = 6;
+    document.getElementById("histUni").value = 1;
+    document.getElementById("goalPart").value = 6;
+  } else if (owner.includes("noelia")) {
+    document.getElementById("goalHost").value = 12;
+    document.getElementById("histHost").value = 0;
+    document.getElementById("goalUni").value = 6;
+    document.getElementById("histUni").value = 0;
+    document.getElementById("goalPart").value = 6;
+  } else if (owner.includes("mauricio")) {
+    document.getElementById("goalHost").value = 0;
+    document.getElementById("histHost").value = 0;
+    document.getElementById("goalUni").value = 12;
+    document.getElementById("histUni").value = 0;
+    document.getElementById("goalPart").value = 12;
+  }
+  runCrmQualityAudit();
+}
+
+function runCrmQualityAudit() {
+  const owner = document.getElementById("ownerSelect").value;
+  const rows = currentData.filter(r => (r[columnMap.propietario] || "").trim() === owner);
+  
+  const sinTipo = rows.filter(r => !(r[columnMap.tipo] || "").trim());
+  const sinPais = rows.filter(r => !(r[columnMap.pais] || "").trim());
+  const prospectosConAct = rows.filter(r => {
+    const st = (r[columnMap.estado] || "").trim();
+    const act = (r[columnMap.ultima_act] || "").trim();
+    const cnt = parseInt(r[columnMap.contactos] || "0", 10);
+    return st === "Prospecto" && (act !== "" || cnt > 0);
+  });
+  const contactadosSinAct = rows.filter(r => {
+    const st = (r[columnMap.estado] || "").trim();
+    const act = (r[columnMap.ultima_act] || "").trim();
+    return st === "Contactado" && act === "";
+  });
+
+  const container = document.getElementById("crmQualityContent");
+  let alerts = [];
+  if (sinTipo.length > 0) {
+    alerts.push(`<li>⚠️ <strong>${sinTipo.length} empresa(s) sin "Tipo" asignado:</strong> <em>${sinTipo.map(x => x[columnMap.empresa]).join(", ")}</em>. (Asígnales Escuelas y Universidades, Host Company o Partner en HubSpot para que sumen en las tablas de los 3 vértices).</li>`);
+  }
+  if (sinPais.length > 0) {
+    alerts.push(`<li>⚠️ <strong>${sinPais.length} empresa(s) sin "País/región":</strong> <em>${sinPais.map(x => x[columnMap.empresa]).join(", ")}</em>.</li>`);
+  }
+  if (prospectosConAct.length > 0) {
+    alerts.push(`<li>🚨 <strong>${prospectosConAct.length} cuenta(s) en estado "Prospecto" pero que YA tienen llamadas/correos registrados:</strong> <em>${prospectosConAct.map(x => x[columnMap.empresa]).join(", ")}</em>. ¡Pásalas a "Contactado" en HubSpot para que se vea tu avance hacia la derecha!</li>`);
+  }
+  if (contactadosSinAct.length > 0) {
+    alerts.push(`<li>⚠️ <strong>${contactadosSinAct.length} cuenta(s) en "Contactado" sin fecha de última actividad:</strong> <em>${contactadosSinAct.map(x => x[columnMap.empresa]).join(", ")}</em>.</li>`);
+  }
+
+  if (alerts.length === 0) {
+    container.innerHTML = `<div class="status-banner status-ok" style="display:block;margin-top:0">🎉 <strong>Higiene de CRM Impecable:</strong> Las ${rows.length} cuentas de <strong>${owner}</strong> tienen Tipo, País y coherencia total entre Estado del Lead y Actividad registrada.</div>`;
+  } else {
+    container.innerHTML = `<div class="status-banner status-warn" style="display:block;margin-top:0"><strong>🔍 Detalles de Higiene CRM detectados en la cartera de ${owner}:</strong><ul class="audit-list">${alerts.join("")}</ul></div>`;
+  }
+}
+
+function parseHubspotDate(str) {
+  if (!str || typeof str !== "string" || str.trim() === "") return null;
+  const clean = str.trim().split(" ")[0];
+  const parts = clean.split("-");
+  if (parts.length === 3) {
+    return new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, parseInt(parts[2],10));
+  }
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function fmtDate(d) {
+  if (!d) return "—";
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+function diffDays(d1, d2) {
+  const utc1 = Date.UTC(d1.getFullYear(), d1.getMonth(), d1.getDate());
+  const utc2 = Date.UTC(d2.getFullYear(), d2.getMonth(), d2.getDate());
+  return Math.floor((utc1 - utc2) / (1000 * 60 * 60 * 24));
+}
+
+function normCountry(raw) {
+  const c = (raw || "").trim();
+  if (!c) return "Sin país";
+  const low = c.toLowerCase();
+  if (low === "spain" || low.includes("españa")) return "España";
+  if (low === "mexico" || low === "méxico") return "México";
+  if (low === "panama" || low === "panamá") return "Panamá";
+  if (low.includes("dominicana")) return "Rep. Dominicana";
+  return c;
+}
+
+function escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function badgeHtml(st) {
+  if (st === "Firmada") return '<span class="badge badge-green">Firmada</span>';
+  if (st === "Activado sin Firma") return '<span class="badge badge-blue">Activado sin Firma</span>';
+  if (st === "Propuesta Enviada") return '<span class="badge badge-red">Propuesta Enviada</span>';
+  if (st === "Interesado") return '<span class="badge badge-amber">Interesado</span>';
+  if (st === "En Espera de Reactivación") return '<span class="badge badge-purple">En Espera de Reactivación</span>';
+  if (st === "Contactado") return '<span class="badge badge-blue">Contactado</span>';
+  if (st === "Descalificado") return '<span class="badge badge-gray">Descalificado</span>';
+  return `<span class="badge badge-gray">${escapeHtml(st || "Prospecto")}</span>`;
+}
+
+function buildVertexMatrix(items, statuses) {
+  const byCountry = {};
+  items.forEach(it => {
+    const p = it.pais;
+    if (!byCountry[p]) {
+      byCountry[p] = { total: 0 };
+      statuses.forEach(s => byCountry[p][s] = 0);
+    }
+    if (byCountry[p][it.estado] !== undefined) {
+      byCountry[p][it.estado]++;
+    }
+    byCountry[p].total++;
+  });
+  const countries = Object.keys(byCountry).sort((a,b) => byCountry[b].total - byCountry[a].total);
+  let trs = "";
+  const totals = { total: 0 };
+  statuses.forEach(s => totals[s] = 0);
+
+  countries.forEach(c => {
+    const row = byCountry[c];
+    totals.total += row.total;
+    let tds = `<td>${escapeHtml(c)}</td>`;
+    statuses.forEach(s => {
+      totals[s] += row[s];
+      tds += `<td>${row[s] > 0 ? "<b>"+row[s]+"</b>" : "0"}</td>`;
+    });
+    tds += `<td><b>${row.total}</b></td>`;
+    trs += `<tr>${tds}</tr>`;
+  });
+
+  let totTds = `<td>Total</td>`;
+  statuses.forEach(s => totTds += `<td>${totals[s]}</td>`);
+  totTds += `<td>${totals.total}</td>`;
+  trs += `<tr style="background:#f8fafc;font-weight:700">${totTds}</tr>`;
+  return trs;
+}
+
+function generateAndPreview() {
+  const owner = document.getElementById("ownerSelect").value;
+  const cutoffStr = document.getElementById("cutoffDate").value;
+  const cutoffDate = parseHubspotDate(cutoffStr) || new Date();
+  const cutoffFormatted = fmtDate(cutoffDate);
+
+  const rawRows = currentData.filter(r => (r[columnMap.propietario] || "").trim() === owner);
+
+  const processed = rawRows.map(r => {
+    const empresa = (r[columnMap.empresa] || "Sin nombre").trim();
+    const tipo = (r[columnMap.tipo] || "Sin Tipo").trim() || "Sin Tipo";
+    const estado = (r[columnMap.estado] || "Prospecto").trim() || "Prospecto";
+    const pais = normCountry(r[columnMap.pais]);
+    const contactos = parseInt(r[columnMap.contactos] || "0", 10) || 0;
+    const dtCrea = parseHubspotDate(r[columnMap.creacion]);
+    const dtAct = parseHubspotDate(r[columnMap.ultima_act]);
+    const dtCall = parseHubspotDate(r[columnMap.ult_llamada]);
+    const dtMail = parseHubspotDate(r[columnMap.ult_correo]);
+    const fuente = columnMap.fuente ? (r[columnMap.fuente] || "").trim() : "";
+
+    const validDates = [dtCrea, dtAct, dtCall, dtMail].filter(Boolean);
+    const dtInicio = validDates.length > 0 ? new Date(Math.min(...validDates.map(d => d.getTime()))) : dtCrea;
+    const diasTotales = dtInicio ? Math.max(0, diffDays(cutoffDate, dtInicio)) : 0;
+    const diasInactivo = dtAct ? Math.max(0, diffDays(cutoffDate, dtAct)) : null;
+
+    let cadencia = "Sin actividad";
+    if (dtCall && dtMail) {
+      const diff = diffDays(dtMail, dtCall);
+      if (diff === 0) cadencia = "Simultáneo (0 d)";
+      else if (diff > 0) cadencia = `Correo ${diff}d después`;
+      else cadencia = `Llamada ${Math.abs(diff)}d después`;
+    } else if (dtCall) {
+      cadencia = "Solo llamada";
+    } else if (dtMail) {
+      cadencia = "Solo correo";
+    } else if (dtAct) {
+      cadencia = "Gestión en CRM";
+    }
+
+    return {
+      empresa, tipo, estado, pais, contactos,
+      inicioStr: dtAct ? fmtDate(dtInicio) : `Alta ${fmtDate(dtCrea)}`,
+      diasTotales,
+      ultActStr: fmtDate(dtAct),
+      diasInactivo,
+      callStr: fmtDate(dtCall),
+      mailStr: fmtDate(dtMail),
+      cadencia,
+      fuente
+    };
+  });
+
+  // Ordenar de mayor a menor por Días Inactivo
+  const withAct = processed.filter(x => x.diasInactivo !== null).sort((a,b) => (b.diasInactivo - a.diasInactivo) || (b.contactos - a.contactos));
+  const noAct = processed.filter(x => x.diasInactivo === null).sort((a,b) => b.diasTotales - a.diasTotales);
+  const sortedAll = [...withAct, ...noAct];
+
+  // Conteos por estado
+  const stOrder = ["Prospecto", "Contactado", "En Espera de Reactivación", "Interesado", "Propuesta Enviada", "Activado sin Firma", "Firmada", "Descalificado"];
+  const stCounts = {};
+  stOrder.forEach(s => stCounts[s] = 0);
+  processed.forEach(x => {
+    stCounts[x.estado] = (stCounts[x.estado] || 0) + 1;
+  });
+
+  // Conteos por Tipo
+  const uniItems = processed.filter(x => x.tipo === "Escuelas y Universidades");
+  const partItems = processed.filter(x => x.tipo === "Partner");
+  const hostItems = processed.filter(x => x.tipo === "Host Company");
+
+  // Objetivos y cierres
+  const goalHost = parseInt(document.getElementById("goalHost").value || "12", 10);
+  const histHost = parseInt(document.getElementById("histHost").value || "0", 10);
+  const goalUni = parseInt(document.getElementById("goalUni").value || "6", 10);
+  const histUni = parseInt(document.getElementById("histUni").value || "0", 10);
+  const goalPart = parseInt(document.getElementById("goalPart").value || "6", 10);
+
+  const closedHost = hostItems.filter(x => x.estado === "Firmada" || x.estado === "Activado sin Firma").length;
+  const netHost = Math.max(0, closedHost - histHost);
+  const pctHost = goalHost > 0 ? Math.min(100, Math.round((netHost / goalHost) * 100)) : 0;
+
+  const closedUni = uniItems.filter(x => x.estado === "Firmada" || x.estado === "Activado sin Firma").length;
+  const netUni = Math.max(0, closedUni - histUni);
+  const pctUni = goalUni > 0 ? Math.min(100, Math.round((netUni / goalUni) * 100)) : 0;
+
+  const closedPart = partItems.filter(x => x.estado === "Firmada" || x.estado === "Activado sin Firma").length;
+  const netPart = closedPart;
+  const pctPart = goalPart > 0 ? Math.min(100, Math.round((netPart / goalPart) * 100)) : 0;
+
+  const totalClosedCRM = stCounts["Firmada"] + stCounts["Activado sin Firma"];
+  const totalNet2026 = netHost + netUni + netPart;
+
+  // Tabla comparativa si hay CSV previo
+  let compSectionHtml = "";
+  if (previousData.length > 0) {
+    const prevOwnerRows = previousData.filter(r => (r[columnMap.propietario] || "").trim() === owner);
+    const prevCounts = {};
+    stOrder.forEach(s => prevCounts[s] = 0);
+    prevOwnerRows.forEach(r => {
+      const s = (r[columnMap.estado] || "Prospecto").trim() || "Prospecto";
+      prevCounts[s] = (prevCounts[s] || 0) + 1;
+    });
+    const prevLabel = document.getElementById("prevDateLabel").value || "Corte Anterior";
+    let compRows = "";
+    stOrder.forEach(s => {
+      const pVal = prevCounts[s] || 0;
+      const cVal = stCounts[s] || 0;
+      const delta = cVal - pVal;
+      const deltaStr = delta > 0 ? `+${delta}` : `${delta}`;
+      compRows += `<tr><td><strong>${s}</strong></td><td>${pVal}</td><td><b>${cVal}</b></td><td><b>${deltaStr}</b></td></tr>`;
+    });
+    compRows += `<tr style="background:#f8fafc;font-weight:700"><td>Total Cartera</td><td>${prevOwnerRows.length}</td><td>${processed.length}</td><td>${processed.length - prevOwnerRows.length >= 0 ? "+"+(processed.length - prevOwnerRows.length) : (processed.length - prevOwnerRows.length)}</td></tr>`;
+    compSectionHtml = `
+    <h2>📊 Cuadro Comparativo de Avance Semanal (${escapeHtml(prevLabel)} → ${cutoffFormatted})</h2>
+    <section class="card">
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Estado del Lead</th><th>${escapeHtml(prevLabel)}</th><th>${cutoffFormatted}</th><th>Variación (Δ)</th></tr></thead>
+          <tbody>${compRows}</tbody>
+        </table>
+      </div>
+    </section>`;
+  }
+
+  // Seguimiento Crítico (>15d en Contactado, Interesado, Propuesta Enviada)
+  const critItems = withAct.filter(x => ["Contactado", "Interesado", "Propuesta Enviada"].includes(x.estado) && x.diasInactivo > 15);
+  const critRowsHtml = critItems.map(r => `
+    <tr>
+      <td>${escapeHtml(r.empresa)}</td>
+      <td>${escapeHtml(r.tipo)}</td>
+      <td>${badgeHtml(r.estado)}</td>
+      <td>${escapeHtml(r.pais)}</td>
+      <td><b>${r.contactos}</b></td>
+      <td>${r.inicioStr}</td>
+      <td>${r.diasTotales} d</td>
+      <td>${r.ultActStr}</td>
+      <td><b>${r.diasInactivo} d</b></td>
+      <td>${r.callStr}</td>
+      <td>${r.mailStr}</td>
+      <td>${escapeHtml(r.cadencia)}</td>
+    </tr>`).join("");
+
+  // En Espera de Reactivación
+  const esperaItems = sortedAll.filter(x => x.estado === "En Espera de Reactivación");
+  const esperaRowsHtml = esperaItems.map(r => `
+    <tr>
+      <td>${escapeHtml(r.empresa)}</td>
+      <td>${escapeHtml(r.tipo)}</td>
+      <td>${badgeHtml(r.estado)}</td>
+      <td>${escapeHtml(r.pais)}</td>
+      <td><b>${r.contactos}</b></td>
+      <td>${r.inicioStr}</td>
+      <td>${r.diasTotales} d</td>
+      <td>${r.ultActStr}</td>
+      <td><b>${r.diasInactivo !== null ? r.diasInactivo + " d" : "—"}</b></td>
+      <td>${r.callStr}</td>
+      <td>${r.mailStr}</td>
+      <td>${escapeHtml(r.cadencia)}</td>
+    </tr>`).join("");
+
+  // Inventario Completo
+  const invRowsHtml = sortedAll.map(r => `
+    <tr>
+      <td>${escapeHtml(r.empresa)}</td>
+      <td>${escapeHtml(r.tipo)}</td>
+      <td>${badgeHtml(r.estado)}</td>
+      <td>${escapeHtml(r.pais)}</td>
+      <td><b>${r.contactos}</b></td>
+      <td>${r.inicioStr}</td>
+      <td>${r.diasInactivo !== null ? r.diasTotales + " d" : r.diasTotales + " d en base"}</td>
+      <td>${r.ultActStr}</td>
+      <td>${r.diasInactivo !== null ? "<b>" + r.diasInactivo + " d</b>" : "—"}</td>
+      <td>${r.callStr}</td>
+      <td>${r.mailStr}</td>
+      <td>${escapeHtml(r.cadencia)}</td>
+    </tr>`).join("");
+
+  const vStatuses = ["Prospecto", "Contactado", "En Espera de Reactivación", "Interesado", "Propuesta Enviada", "Activado sin Firma", "Firmada", "Descalificado"];
+  const uniMatrixHtml = buildVertexMatrix(uniItems, vStatuses);
+  const partMatrixHtml = buildVertexMatrix(partItems, vStatuses);
+  const hostMatrixHtml = buildVertexMatrix(hostItems, vStatuses);
+
+  // Barras SVG dinámicas
+  const maxBar = Math.max(55, ...stOrder.map(s => stCounts[s] || 0));
+  const barColors = {
+    "Prospecto": "#94a3b8",
+    "Contactado": "#2563eb",
+    "En Espera de Reactivación": "#7c3aed",
+    "Interesado": "#fbbf24",
+    "Propuesta Enviada": "#ff7a59",
+    "Activado sin Firma": "#38bdf8",
+    "Firmada": "#067647",
+    "Descalificado": "#e02424"
+  };
+  const shortLabels = {
+    "Prospecto": "Prospecto",
+    "Contactado": "Contactado",
+    "En Espera de Reactivación": "En Espera",
+    "Interesado": "Interesado",
+    "Propuesta Enviada": "Propuesta",
+    "Activado sin Firma": "Activado",
+    "Firmada": "Firmada",
+    "Descalificado": "Descalif."
+  };
+  let svgBars = "";
+  stOrder.forEach((s, idx) => {
+    const val = stCounts[s] || 0;
+    const h = Math.round((val / maxBar) * 245);
+    const y = 275 - h;
+    const x = 70 + idx * 95;
+    svgBars += `
+      <rect x="${x}" y="${y}" width="50" height="${h}" rx="4" fill="${barColors[s]}"/>
+      <text x="${x+25}" y="${Math.max(18, y-8)}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e293b">${val}</text>
+      <text x="${x+25}" y="295" text-anchor="middle" font-size="9.5" font-weight="600" fill="#475467">${shortLabels[s]}</text>`;
+  });
+
+  generatedHtmlString = `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard Comercial HubSpot — ${escapeHtml(owner)} · Corte ${cutoffFormatted}</title>
+<style>
+:root{--bg:#f4f7fb;--card:#fff;--text:#172033;--muted:#667085;--line:#e6eaf0;--accent:#ff7a59;--blue:#2563eb;--red:#b42318;--green:#067647;--amber:#b54708;--purple:#6941c6}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text)}
+header{background:linear-gradient(120deg,#172033,#1e293b);color:#fff;padding:32px 5vw 26px;box-shadow:0 4px 18px rgba(0,0,0,.08)}
+header .top-tag{display:inline-block;background:rgba(255,122,89,.2);color:#ff9e85;font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:4px 10px;border-radius:20px;margin-bottom:8px}
+header h1{margin:0 0 6px;font-size:28px;letter-spacing:-.4px}
+header p{margin:0;opacity:.85;font-size:13.5px}
+main{width:min(1540px,95vw);margin:24px auto 50px}
+.notice{background:#fff7ed;border-left:4px solid var(--accent);padding:14px 18px;border-radius:8px;margin-bottom:20px;font-size:13px;line-height:1.55}
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+.kpi,.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 4px 18px rgba(20,35,60,.04);padding:16px}
+.label{color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.value{font-size:27px;font-weight:800;margin-top:6px;color:var(--text)}
+.sub,.desc{color:var(--muted);font-size:11.5px;line-height:1.45;margin-top:5px}
+h2{font-size:18.5px;margin:32px 0 12px;display:flex;align-items:center;gap:8px;color:#1e293b}
+.grid{display:grid;grid-template-columns:1.18fr .82fr;gap:16px}
+.vertex-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.chart{width:100%;height:auto;display:block}
+table{border-collapse:collapse;width:100%;font-size:11.6px}
+th,td{padding:8px 9px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{background:#f8fafc;color:#475467;font-weight:700;font-size:11px;letter-spacing:.3px;position:sticky;top:0;z-index:1}
+.tablewrap{overflow-x:auto;border-radius:8px;border:1px solid var(--line)}
+.alert{background:#fff1f0;border-left:3px solid var(--red);padding:10px 12px;border-radius:7px;font-size:12px;margin:10px 0;color:var(--red);font-weight:600}
+.goalrow{margin:16px 0}.goalhead{display:flex;justify-content:space-between;font-size:12.5px;font-weight:600}
+.track{height:11px;background:#eef2f6;border-radius:999px;overflow:hidden;margin-top:6px}.track i{display:block;height:100%;border-radius:999px}
+.badge{display:inline-block;padding:3px 8px;border-radius:12px;font-size:10.5px;font-weight:700}
+.badge-green{background:#ecfdf3;color:var(--green)}
+.badge-blue{background:#eff8ff;color:var(--blue)}
+.badge-amber{background:#fffaeb;color:var(--amber)}
+.badge-red{background:#fef3f2;color:var(--red)}
+.badge-gray{background:#f2f4f7;color:var(--muted)}
+.badge-purple{background:#f9f5ff;color:var(--purple)}
+.searchbox{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.searchbox input,.searchbox select{padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;background:#fff;outline:none}
+.searchbox input{flex:1;min-width:240px}
+footer{color:var(--muted);font-size:11.5px;margin-top:35px;border-top:1px solid var(--line);padding-top:15px;display:flex;justify-content:space-between}
+@media(max-width:1150px){.kpis{grid-template-columns:repeat(3,1fr)}.grid,.vertex-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <span class="top-tag">BackOffice Comercial · Reporte Maestro Homologado</span>
+  <h1>Desempeño Comercial — ${escapeHtml(owner)}</h1>
+  <p>Corte oficial HubSpot: ${cutoffFormatted} · Matrices de los 3 Vértices, Interacciones, Duración Total de Gestión y Cadencia</p>
+</header>
+<main>
+<div class="notice">
+  <strong>Criterios de Auditoría (${cutoffFormatted}):</strong> ${processed.length} cuentas asignadas a ${escapeHtml(owner)} (${uniItems.length} Universidades, ${hostItems.length} Host Companies y ${partItems.length} Partners). Ordenamiento estricto de <strong>mayor a menor por días de inactividad</strong>.
+</div>
+
+<section class="kpis">
+  <div class="kpi"><div class="label">Total Cartera CRM</div><div class="value">${processed.length}</div><div class="sub">${uniItems.length} Univ · ${hostItems.length} Host · ${partItems.length} Part</div></div>
+  <div class="kpi"><div class="label">Cierres Consolidados</div><div class="value" style="color:var(--green)">${totalClosedCRM}</div><div class="sub">${stCounts["Firmada"]} Firmadas · ${stCounts["Activado sin Firma"]} Activados</div></div>
+  <div class="kpi"><div class="label">Producción Neta 2026</div><div class="value" style="color:var(--blue)">${totalNet2026}</div><div class="sub">${netHost} Emp · ${netUni} Univ · ${netPart} Part</div></div>
+  <div class="kpi"><div class="label">Interesado / Propuesta</div><div class="value" style="color:var(--accent)">${stCounts["Interesado"] + stCounts["Propuesta Enviada"]}</div><div class="sub">${stCounts["Interesado"]} Interesados · ${stCounts["Propuesta Enviada"]} Propuestas</div></div>
+  <div class="kpi"><div class="label">En Contacto Activo</div><div class="value">${stCounts["Contactado"]}</div><div class="sub">Gestión comercial en curso</div></div>
+  <div class="kpi"><div class="label">Espera Reactivación</div><div class="value" style="color:var(--purple)">${stCounts["En Espera de Reactivación"]}</div><div class="sub">Cuentas en pausa programada</div></div>
+</section>
+
+${compSectionHtml}
+
+<h2>📈 Embudo Actual y Desempeño vs Objetivos Anuales</h2>
+<section class="grid">
+  <div class="card">
+    <h3 style="margin:0 0 12px;font-size:14px;color:#334155">Embudo Comercial Individual — ${processed.length} Entidades (${cutoffFormatted})</h3>
+    <svg viewBox="0 0 860 320" class="chart">
+      <line x1="50" y1="30" x2="830" y2="30" stroke="#e6eaf0"/>
+      <line x1="50" y1="152" x2="830" y2="152" stroke="#e6eaf0"/>
+      <line x1="50" y1="275" x2="830" y2="275" stroke="#94a3b8"/>
+      ${svgBars}
+    </svg>
+  </div>
+  <div class="card">
+    <h3 style="margin:0 0 12px;font-size:14px;color:#334155">Desempeño Anual 2026: Producción Neta vs Base Previa</h3>
+    <div class="goalrow">
+      <div class="goalhead"><span>Nuevos Empleadores (Meta: ${goalHost})</span><b>${netHost} netos 2026 (${pctHost}%) · ${closedHost} en CRM</b></div>
+      <div class="track"><i style="width:${pctHost}%;background:#067647"></i></div>
+    </div>
+    <div class="goalrow">
+      <div class="goalhead"><span>Universidades y Escuelas (Meta: ${goalUni})</span><b>${netUni} netos 2026 (${pctUni}%) · ${closedUni} en CRM</b></div>
+      <div class="track"><i style="width:${pctUni}%;background:#2563eb"></i></div>
+    </div>
+    <div class="goalrow">
+      <div class="goalhead"><span>Agencias y Partners (Meta: ${goalPart})</span><b>${netPart} netos 2026 (${pctPart}%) · ${closedPart} en CRM</b></div>
+      <div class="track"><i style="width:${pctPart}%;background:#ff7a59"></i></div>
+    </div>
+  </div>
+</section>
+
+<h2>🧭 Evolución Hacia la Derecha: Matrices de los 3 Vértices Comerciales</h2>
+<section class="card" style="margin-bottom:16px">
+  <h3 style="margin:0 0 10px;font-size:15px;color:#1e293b">1. Vértice Académico: Escuelas y Universidades por País (${uniItems.length} cuentas)</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>País</th><th>Prosp.</th><th>Cont.</th><th>Espera</th><th>Inter.</th><th>Prop.</th><th>Activ.</th><th>Firm.</th><th>Desc.</th><th>Total</th></tr></thead>
+      <tbody>${uniMatrixHtml}</tbody>
+    </table>
+  </div>
+</section>
+
+<section class="vertex-grid">
+  <div class="card">
+    <h3 style="margin:0 0 10px;font-size:15px;color:#1e293b">2. Vértice Agencias y Partners por País (${partItems.length} cuentas)</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>País</th><th>Prosp.</th><th>Cont.</th><th>Espera</th><th>Inter.</th><th>Prop.</th><th>Activ.</th><th>Firm.</th><th>Desc.</th><th>Total</th></tr></thead>
+        <tbody>${partMatrixHtml}</tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <h3 style="margin:0 0 10px;font-size:15px;color:#1e293b">3. Vértice Empleadores / Host Companies (${hostItems.length} cuentas)</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>País</th><th>Prosp.</th><th>Cont.</th><th>Espera</th><th>Inter.</th><th>Prop.</th><th>Activ.</th><th>Firm.</th><th>Desc.</th><th>Total</th></tr></thead>
+        <tbody>${hostMatrixHtml}</tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<h2>⏱️ Seguimiento Crítico: Oportunidades >15 Días Sin Actividad (${critItems.length} Cuentas)</h2>
+<section class="card">
+  <div class="alert">${critItems.length} cuentas en Contactado, Interesado o Propuesta superan los 15 días sin actividad al ${cutoffFormatted}:</div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Empresa</th><th>Tipo</th><th>Estado</th><th>País</th><th>N.º Interacciones</th><th>1.ª Interacción</th><th>Días Totales Gestión</th><th>Última Actividad</th><th>Días Inactivo</th><th>Última Llamada</th><th>Último Correo</th><th>Cadencia Multicanal</th></tr></thead>
+      <tbody>${critRowsHtml}</tbody>
+    </table>
+  </div>
+</section>
+
+<h2>⏸️ Cuentas en "En Espera de Reactivación" (${esperaItems.length} Cuentas)</h2>
+<section class="card">
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Empresa</th><th>Tipo</th><th>Estado</th><th>País</th><th>N.º Interacciones</th><th>1.ª Interacción</th><th>Días Totales Gestión</th><th>Última Actividad</th><th>Días Inactivo</th><th>Última Llamada</th><th>Último Correo</th><th>Cadencia Multicanal</th></tr></thead>
+      <tbody>${esperaRowsHtml}</tbody>
+    </table>
+  </div>
+</section>
+
+<h2>📋 Inventario Completo de Cartera — Los ${processed.length} Registros de ${escapeHtml(owner)} (${cutoffFormatted})</h2>
+<section class="card">
+  <div class="searchbox">
+    <input type="text" id="searchInput" placeholder="Buscar por empresa, país, tipo o estado..." onkeyup="filterTable()">
+    <select id="statusFilter" onchange="filterTable()">
+      <option value="">Todos los Estados (${processed.length})</option>
+      <option value="Firmada">Firmada (${stCounts["Firmada"]})</option>
+      <option value="Activado sin Firma">Activado sin Firma (${stCounts["Activado sin Firma"]})</option>
+      <option value="Propuesta Enviada">Propuesta Enviada (${stCounts["Propuesta Enviada"]})</option>
+      <option value="Interesado">Interesado (${stCounts["Interesado"]})</option>
+      <option value="En Espera de Reactivación">En Espera de Reactivación (${stCounts["En Espera de Reactivación"]})</option>
+      <option value="Contactado">Contactado (${stCounts["Contactado"]})</option>
+      <option value="Prospecto">Prospecto (${stCounts["Prospecto"]})</option>
+      <option value="Descalificado">Descalificado (${stCounts["Descalificado"]})</option>
+    </select>
+    <select id="typeFilter" onchange="filterTable()">
+      <option value="">Todos los Tipos (3 Vértices)</option>
+      <option value="Escuelas y Universidades">Escuelas y Universidades (${uniItems.length})</option>
+      <option value="Host Company">Host Company (${hostItems.length})</option>
+      <option value="Partner">Partner (${partItems.length})</option>
+    </select>
+  </div>
+  <div class="tablewrap" style="max-height:680px;overflow-y:auto">
+    <table id="leadsTable">
+      <thead><tr><th>Empresa</th><th>Tipo</th><th>Estado</th><th>País</th><th>N.º Interacciones</th><th>1.ª Interacción</th><th>Días Totales Gestión</th><th>Última Actividad</th><th>Días Inactivo</th><th>Última Llamada</th><th>Último Correo</th><th>Cadencia Multicanal</th></tr></thead>
+      <tbody>${invRowsHtml}</tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <div><strong>Latam Go Travel</strong> · BackOffice Comercial (${escapeHtml(owner)})</div>
+  <div>Corte Oficial HubSpot: ${cutoffFormatted} · Generado Automáticamente (${processed.length} registros)</div>
+</footer>
+</main>
+<script>
+function filterTable() {
+  const search = document.getElementById("searchInput").value.toLowerCase();
+  const status = document.getElementById("statusFilter").value.toLowerCase();
+  const type = document.getElementById("typeFilter").value.toLowerCase();
+  const rows = document.querySelectorAll("#leadsTable tbody tr");
+  rows.forEach(row => {
+    const text = row.innerText.toLowerCase();
+    const rowType = row.children[1].innerText.toLowerCase();
+    const rowStatus = row.children[2].innerText.toLowerCase();
+    const mSearch = text.includes(search);
+    const mStatus = !status || rowStatus.includes(status);
+    const mType = !type || rowType.includes(type);
+    row.style.display = (mSearch && mStatus && mType) ? "" : "none";
+  });
+}
+<\/script>
+</body>
+</html>`;
+
+  document.getElementById("previewSection").style.display = "block";
+  const frame = document.getElementById("previewFrame");
+  frame.srcdoc = generatedHtmlString;
+  document.getElementById("btnDownload").disabled = false;
+}
+
+function downloadReport() {
+  if (!generatedHtmlString) return;
+  const owner = document.getElementById("ownerSelect").value.replace(/\s+/g, "_");
+  const cutoff = document.getElementById("cutoffDate").value;
+  const blob = new Blob([generatedHtmlString], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `Dashboard_Comercial_${owner}_${cutoff}.html`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
